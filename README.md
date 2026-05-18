@@ -43,20 +43,20 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v5.0.0
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Set up Helm
-        uses: azure/setup-helm@v4.3.1
+        uses: azure/setup-helm@v4
 
-      - uses: actions/setup-python@v6.0.0
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.x'
           check-latest: true
 
       - name: Set up chart-testing
-        uses: step-security/chart-testing-action@v2.8.0
+        uses: step-security/chart-testing-action@v2
 
       - name: Run chart-testing (list-changed)
         id: list-changed
@@ -72,7 +72,7 @@ jobs:
 
       - name: Create kind cluster
         if: steps.list-changed.outputs.changed == 'true'
-        uses: helm/kind-action@v1.12.0
+        uses: helm/kind-action@v1
 
       - name: Run chart-testing (install)
         if: steps.list-changed.outputs.changed == 'true'
@@ -82,13 +82,3 @@ jobs:
 This uses [`helm/kind-action`](https://www.github.com/helm/kind-action) GitHub Action to spin up a [kind](https://kind.sigs.k8s.io/) Kubernetes cluster,
 and [`helm/chart-testing`](https://www.github.com/helm/chart-testing) to lint and test your charts on every pull request.
 
-## Upgrading from v1.x.x
-
-v2.0.0 is a major release with breaking changes.
-The action no longer wraps the chart-testing tool but simply installs it.
-It is no longer run in a Docker container.
-All `ct` options are now directly available without the additional abstraction layer.
-
-## Code of conduct
-
-Participation in the Helm community is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).
