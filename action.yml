@@ -69,7 +69,7 @@ runs:
         fi
       shell: bash
     - uses: step-security/cosign-installer@8c02650536457a1c912424ab6cb9734aa3eceb56 # v4.1.1
-    - uses: step-security/setup-uv@ccf0a26ce9117d9e99292b0ce953ea5d9ffe778e # v7.3.0
+    - uses: step-security/setup-uv@479ad0a90c4286eda3535eb7db396ed723b63fb7 # v8.1.0
       with:
         version: ${{ inputs.uv_version }}
     - env:
