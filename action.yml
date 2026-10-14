@@ -5,6 +5,10 @@ branding:
   color: blue
   icon: anchor
 inputs:
+  verify_blob:
+    description: "determines whether the download blob should be verified (default: true)"
+    required: false
+    default: 'true'
   version:
     description: "The chart-testing version to install"
     required: false
@@ -21,6 +25,14 @@ inputs:
     description: "The uv version to install (default: latest)"
     required: false
     default: 'latest'
+  github_token:
+    description: "GitHub token for authenticating with the GitHub API (default: github.token)"
+    required: false
+    default: ${{ github.token }}
+  lint_config:
+    description: "Path to a custom yamllint config file. If set, ct lint uses it instead of the default lintconf.yaml."
+    required: false
+    default: ''
 runs:
   using: composite
   steps:
@@ -69,17 +81,41 @@ runs:
         fi
       shell: bash
     - uses: step-security/cosign-installer@7d5ca7d0ecba292387fa6f81cde2c05e53a2a6d7 # v4.1.2
-    - uses: step-security/setup-uv@479ad0a90c4286eda3535eb7db396ed723b63fb7 # v8.1.0
+      if: ${{ inputs.verify_blob != 'false' }}
+    - uses: step-security/setup-uv@74a4e3db95d70115a82e33151924944cfac643cb # v10.2.0
       with:
         version: ${{ inputs.uv_version }}
-    - env:
-        CT_VERSION: ${{ inputs.version }}
-        YAMLLINT_VERSION: ${{ inputs.yamllint_version }}
-        YAMALE_VERSION: ${{ inputs.yamale_version }}
-      run: |
+        github-token: ${{ inputs.github_token }}
+    - run: |
         cd "$GITHUB_ACTION_PATH" \
         && ./ct.sh \
-            --version "$CT_VERSION" \
+            --verify-blob "$VERIFY_BLOB" \
+            --version "$CHART_TESTING_VERSION" \
             --yamllint-version "$YAMLLINT_VERSION" \
             --yamale-version "$YAMALE_VERSION"
+      shell: bash
+      env:
+        VERIFY_BLOB: ${{ inputs.verify_blob }}
+        CHART_TESTING_VERSION: ${{ inputs.version }}
+        YAMLLINT_VERSION: ${{ inputs.yamllint_version }}
+        YAMALE_VERSION: ${{ inputs.yamale_version }}
+    - if: inputs.lint_config != ''
+      env:
+        LINT_CONFIG: ${{ inputs.lint_config }}
+      run: |
+        if [[ "${LINT_CONFIG}" == *[$'\n\r']* ]]; then
+          echo "::error::lint_config must not contain a line break"
+          exit 1
+        fi
+        if [[ ! -f "${LINT_CONFIG}" ]]; then
+          echo "::error::lint_config file not found: ${LINT_CONFIG}"
+          exit 1
+        fi
+        lint_conf="$(realpath -- "${LINT_CONFIG}")"
+        if [[ "${lint_conf}" == *[$'\n\r']* ]]; then
+          echo "::error::lint_config must not resolve to a path with a line break"
+          exit 1
+        fi
+        echo "CT_LINT_CONF=${lint_conf}" >> "${GITHUB_ENV}"
+        echo "Using custom yamllint config: ${LINT_CONFIG}"
       shell: bash
