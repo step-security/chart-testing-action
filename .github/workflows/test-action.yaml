@@ -1,0 +1,292 @@
+name: test-chart-testing-action
+
+on:
+  pull_request:
+  push:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: {}
+
+jobs:
+  test_ct_action:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Clone the repository
+
+    name: Install chart-testing and test presence in path
+    steps:
+    - name: Harden the runner (Audit all outbound calls)
+      uses: step-security/harden-runner@ab7a9404c0f3da075243ca237b5fac12c98deaa5 # v2.19.3
+      with:
+        egress-policy: audit
+
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+    - name: Install chart-testing
+      uses: ./
+    - name: Check install!
+      run: |
+        ct version
+        CT_VERSION_OUTPUT=$(ct version 2>&1 /dev/null)
+        ACTUAL_VERSION=$(echo "$CT_VERSION_OUTPUT" | grep Version | rev | cut -d ' ' -f1 | rev)
+        if [[ $ACTUAL_VERSION != 'v3.15.0' ]]; then
+          echo 'should be v3.15.0'
+          exit 1
+        else
+          exit 0
+        fi
+      shell: bash
+    - name: Check root directory
+      run: |
+        if [[ $(git diff --stat) != '' ]]; then
+          echo 'should be clean'
+          exit 1
+        else
+          exit 0
+        fi
+
+  test_ct_action_custom:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Clone the repository
+
+    name: Install Custom chart-testing and test presence in path
+    steps:
+    - name: Harden the runner (Audit all outbound calls)
+      uses: step-security/harden-runner@ab7a9404c0f3da075243ca237b5fac12c98deaa5 # v2.19.3
+      with:
+        egress-policy: audit
+
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+    - name: Install chart-testing
+      uses: ./
+      with:
+        version: 'v3.8.0'
+        yamllint_version: '1.27.1'
+        yamale_version: '3.0.4'
+    - name: Check install!
+      run: |
+        ct version
+        CT_VERSION_OUTPUT=$(ct version 2>&1 /dev/null)
+        ACTUAL_VERSION=$(echo "$CT_VERSION_OUTPUT" | grep Version | rev | cut -d ' ' -f1 | rev)
+        if [[ $ACTUAL_VERSION != 'v3.8.0' ]]; then
+          echo 'should be v3.8.0'
+          exit 1
+        else
+          exit 0
+        fi
+      shell: bash
+    - name: Check root directory
+      run: |
+        if [[ $(git diff --stat) != '' ]]; then
+          echo 'should be clean'
+          exit 1
+        else
+          exit 0
+        fi
+
+  test_ct_action_with_helm:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Clone the repository and diff against the target branch
+
+    name: run action to test a helm chart
+    steps:
+    - name: Harden the runner (Audit all outbound calls)
+      uses: step-security/harden-runner@ab7a9404c0f3da075243ca237b5fac12c98deaa5 # v2.19.3
+      with:
+        egress-policy: audit
+
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+
+    - name: Set up Helm
+      uses: step-security/setup-helm@104176d810f424da7451a3fe25620d40c4dfb883
+      with:
+        version: v3.17.0
+
+    - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      with:
+        python-version: '3.x'
+        check-latest: true
+
+    - name: Install chart-testing
+      uses: ./
+
+    - run: |
+        sed -i "s/version: .*/version: 2.0.0/" testdata/simple-deployment/Chart.yaml
+        cat testdata/simple-deployment/Chart.yaml
+
+    - name: Run chart-testing (list-changed)
+      id: list-changed
+      env:
+        BRANCH_NAME: ${{ github.event.repository.default_branch }}
+      run: |
+        changed=$(ct list-changed --chart-dirs=testdata --target-branch ${BRANCH_NAME})
+        if [[ -n "$changed" ]]; then
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Run chart-testing (lint)
+      if: steps.list-changed.outputs.changed == 'true'
+      env:
+        BRANCH_NAME: ${{ github.event.repository.default_branch }}
+      run: ct lint --chart-dirs=testdata --target-branch ${BRANCH_NAME}
+
+    - name: Create kind cluster
+      if: steps.list-changed.outputs.changed == 'true'
+      uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
+
+    - name: Run chart-testing (install)
+      if: steps.list-changed.outputs.changed == 'true'
+      env:
+        BRANCH_NAME: ${{ github.event.repository.default_branch }}
+      run: ct install --chart-dirs=testdata --target-branch ${BRANCH_NAME}
+
+  test_ct_action_noverify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Clone the repository
+
+    name: Install chart-testing without verifying blob and test presence in path
+    steps:
+    - name: Harden the runner (Audit all outbound calls)
+      uses: step-security/harden-runner@ab7a9404c0f3da075243ca237b5fac12c98deaa5 # v2.19.3
+      with:
+        egress-policy: audit
+
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+    - name: Install chart-testing
+      uses: ./
+      with:
+        verify_blob: 'false'
+    - name: Check install!
+      run: |
+        ct version
+        CT_VERSION_OUTPUT=$(ct version 2>&1 /dev/null)
+        ACTUAL_VERSION=$(echo "$CT_VERSION_OUTPUT" | grep Version | rev | cut -d ' ' -f1 | rev)
+        if [[ $ACTUAL_VERSION != 'v3.15.0' ]]; then
+          echo 'should be v3.15.0'
+          exit 1
+        else
+          exit 0
+        fi
+      shell: bash
+    - name: Check root directory
+      run: |
+        if [[ $(git diff --stat) != '' ]]; then
+          echo 'should be clean'
+          exit 1
+        else
+          exit 0
+        fi
+
+  test_ct_action_with_lint_config:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Clone the repository
+
+    name: run action with a custom yamllint config
+    steps:
+    - name: Harden the runner (Audit all outbound calls)
+      uses: step-security/harden-runner@ab7a9404c0f3da075243ca237b5fac12c98deaa5 # v2.19.3
+      with:
+        egress-policy: audit
+
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Set up Helm
+      uses: step-security/setup-helm@104176d810f424da7451a3fe25620d40c4dfb883
+      with:
+        version: v3.17.0
+
+    - name: Install chart-testing
+      uses: ./
+
+    - name: Run chart-testing (lint) with the default config
+      run: ct lint --charts testdata/simple-deployment --check-version-increment=false --validate-maintainers=false
+
+    - name: Install chart-testing with lint_config
+      uses: ./
+      with:
+        lint_config: testdata/custom-lintconf.yaml
+
+    - name: Check CT_LINT_CONF
+      run: |
+        if [[ "${CT_LINT_CONF}" != "$(realpath testdata/custom-lintconf.yaml)" ]]; then
+          echo "CT_LINT_CONF should point to testdata/custom-lintconf.yaml, got '${CT_LINT_CONF}'"
+          exit 1
+        fi
+      shell: bash
+
+    - name: Run chart-testing (lint) with the custom config
+      run: |
+        log="${RUNNER_TEMP}/ct-lint.log"
+        if ct lint --charts testdata/simple-deployment --check-version-increment=false --validate-maintainers=false > "${log}" 2>&1; then
+          cat "${log}"
+          echo 'ct lint should fail on the document-start rule from lint_config'
+          exit 1
+        fi
+        if ! grep -q 'missing document start' "${log}"; then
+          cat "${log}"
+          echo 'ct lint failed, but not because of lint_config'
+          exit 1
+        fi
+        echo 'ct lint failed on the document-start rule from lint_config, as expected'
+      shell: bash
+
+    - name: Install chart-testing with a missing lint_config
+      id: missing_lint_config
+      continue-on-error: true
+      uses: ./
+      with:
+        lint_config: testdata/does-not-exist.yaml
+
+    - name: Check the missing lint_config failed
+      env:
+        OUTCOME: ${{ steps.missing_lint_config.outcome }}
+      run: |
+        if [[ "${OUTCOME}" != 'failure' ]]; then
+          echo 'a missing lint_config should fail the action'
+          exit 1
+        fi
+      shell: bash
+
+    - name: Create a lint_config path with a line break
+      run: |
+        mkdir -p $'lint\nCT_INJECTED=conf'
+        cp testdata/custom-lintconf.yaml $'lint\nCT_INJECTED=conf/lintconf.yaml'
+      shell: bash
+
+    - name: Install chart-testing with a line break in lint_config
+      id: line_break_lint_config
+      continue-on-error: true
+      uses: ./
+      with:
+        lint_config: "lint\nCT_INJECTED=conf/lintconf.yaml"
+
+    - name: Check the line break was rejected
+      env:
+        OUTCOME: ${{ steps.line_break_lint_config.outcome }}
+      run: |
+        if [[ "${OUTCOME}" != 'failure' ]]; then
+          echo 'a lint_config with a line break should fail the action'
+          exit 1
+        fi
+        if [[ -n "${CT_INJECTED:-}" ]]; then
+          echo "lint_config wrote CT_INJECTED=${CT_INJECTED} into GITHUB_ENV"
+          exit 1
+        fi
+      shell: bash
