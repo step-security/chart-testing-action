@@ -20,6 +20,7 @@ For more information on inputs, see the [API Documentation](https://developer.gi
 - `version`: The chart-testing version to install (default: `3.14.0`)
 - `yamllint_version`: The `yamllint` version to install (default: `1.33.0`)
 - `yamale_version`: The `yamale` version to install (default: `6.0.0`)
+- `lint_config`: Path to a custom yamllint config file. If set, `ct lint` uses it instead of the default `lintconf.yaml` (default: none)
 
 ### Example Workflow
 
@@ -81,4 +82,3 @@ jobs:
 
 This uses [`helm/kind-action`](https://www.github.com/helm/kind-action) GitHub Action to spin up a [kind](https://kind.sigs.k8s.io/) Kubernetes cluster,
 and [`helm/chart-testing`](https://www.github.com/helm/chart-testing) to lint and test your charts on every pull request.
-
